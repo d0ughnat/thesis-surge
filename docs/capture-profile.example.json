@@ -1,0 +1,20 @@
+{
+  "enabled": false,
+  "status": "hardware_characterization_required",
+  "board_and_module": null,
+  "flash_partition_map": null,
+  "sensor_transfer_and_bandwidth_evidence": null,
+  "adc_mechanism": null,
+  "sample_rate_hz": null,
+  "pre_trigger_ms": null,
+  "post_trigger_ms": null,
+  "maximum_interval_error_us": null,
+  "maximum_gap_us": null,
+  "ring_samples": null,
+  "capture_slots": null,
+  "ram_budget_bytes": null,
+  "storage_budget_bytes": null,
+  "overflow_acceptance": null,
+  "stress_test_evidence": null,
+  "hardware_approval_reference": null
+}
