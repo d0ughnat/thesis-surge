@@ -33,6 +33,10 @@ h1{font-size:1.1rem;font-weight:600;text-align:center;color:var(--text);letter-s
 canvas{width:100%;display:block;border-radius:4px}
 .uptime{font-family:SF Mono,Cascadia Code,Consolas,monospace;font-size:.6rem;color:var(--muted);text-align:center}
 .d-val-stable{color:#999}.d-val-mod{color:#555}.d-val-fast{color:#111;font-weight:600}
+.detail{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px 8px;margin-top:8px}
+.detail b{display:block;font-family:SF Mono,Cascadia Code,Consolas,monospace;font-size:.95rem;font-weight:400;color:var(--text);margin-bottom:2px}
+.cal-row{display:flex;gap:8px;justify-content:center;align-items:center;flex-wrap:wrap;margin:10px 0 6px}
+.cal-row input{font-family:SF Mono,Cascadia Code,Consolas,monospace;font-size:1rem;width:110px;padding:7px 8px;border:1px solid var(--border);border-radius:6px;text-align:center;color:var(--text);background:var(--surface)}
 .surge-banner{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:14px 16px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px}
 .surge-today{font-size:.85rem;color:var(--text)}
 .surge-today span{font-family:monospace;font-size:1.4rem;color:var(--text);font-weight:600}
@@ -64,7 +68,7 @@ canvas{width:100%;display:block;border-radius:4px}
 .event-detail .kv span:first-child{color:var(--muted)}
 .event-detail .actions{display:flex;gap:8px;margin-top:12px;flex-wrap:wrap}
 .hidden{display:none!important}
-@media(max-width:600px){.gauges{grid-template-columns:1fr}.tab-btn{padding:10px 12px;font-size:.7rem}.log-table{font-size:.72rem}.log-table th,.log-table td{padding:8px 6px}}
+@media(max-width:600px){.gauges{grid-template-columns:1fr}.detail{grid-template-columns:repeat(2,minmax(0,1fr))}.tab-btn{padding:10px 12px;font-size:.7rem}.log-table{font-size:.72rem}.log-table th,.log-table td{padding:8px 6px}}
 </style></head><body><div class="wrapper">
 <h1>AC Power Monitor</h1>
 <div class="conn-status" id="connStatus"><span class="conn-dot" id="connDot"></span><span class="conn-text" id="connText">Connecting...</span></div>
@@ -72,27 +76,36 @@ canvas{width:100%;display:block;border-radius:4px}
 <div class="tab-nav" role="tablist">
   <button class="tab-btn active" role="tab" aria-selected="true" onclick="switchTab('isolation',this)">Now</button>
   <button class="tab-btn" role="tab" aria-selected="false" onclick="switchTab('events',this)">Alerts</button>
+  <button class="tab-btn" role="tab" aria-selected="false" onclick="switchTab('calibration',this)">Calibration</button>
 </div>
 
 <div id="tab-isolation" class="tab-pane active" role="tabpanel">
   <div class="gauges">
-    <div class="card"><div class="unit">Voltage</div><span class="val" id="vval">--.-</span><div class="unit">Volts RMS · Latest reading</div><div class="unit" id="voltageRange">Since restart: --</div><span class="status-badge unknown" id="badge">INIT</span></div>
+    <div class="card"><div class="unit">Voltage</div><span class="val" id="vval">--.-</span><div class="unit">Volts RMS · Live reading</div><div class="unit" id="voltageRange">Since restart: --</div><span class="status-badge warning hidden" id="changeBadge">CHANGE</span></div>
     <div class="card"><div class="unit">Current</div><span class="val" id="ival">N/A</span><div class="unit">ACS712 · GPIO35</div><div class="unit" id="currentDiag">ADC: --</div></div>
   </div>
-  <div class="card"><div class="unit">Rate of Change</div><span class="val-sm d-val-stable" id="dvdt">0.00 V/s</span><div class="unit">dV/dt — Voltage Rate</div></div>
+  <div class="card"><div class="unit">Voltage Detail</div><div class="detail">
+    <div class="unit"><b id="dAvg">--</b>1 s average</div>
+    <div class="unit"><b id="dStep">--</b>vs previous reading</div>
+    <div class="unit"><b id="dDev">--</b>vs steady level</div>
+    <div class="unit"><b id="dNoise">--</b>Reading noise</div>
+    <div class="unit"><b id="dHz">--</b>Frequency</div>
+    <div class="unit"><b id="dPct">--</b>Of nominal</div>
+  </div><div class="unit" id="changeNote" style="margin-top:10px">No voltage change detected since restart</div></div>
+  <div class="card"><div class="unit">Rate of Change</div><span class="val-sm d-val-stable" id="dvdt">0.00 V/s</span><div class="unit">dV/dt — Trend over last 2 s</div></div>
   <div class="chart-card"><div class="chart-label">Live Voltage Drop</div><canvas id="liveVChart" height="110"></canvas></div>
   <div class="chart-card"><div class="chart-label">Live Current</div><canvas id="liveIChart" height="110"></canvas></div>
   <div class="card"><div class="unit">Isolation Relay</div><span class="val-sm" id="relayState">--</span><div class="unit" id="relayReason"></div></div>
-  <div class="card"><div class="unit">Relay Test</div><button class="btn" id="relayTestBtn" onclick="toggleRelayTest()">TEST OFF</button><div class="unit" id="relayTestNote">Normal relay control</div></div>
-  <div class="card"><div class="unit">YCCH6 Surge Demo</div><button class="btn btn-danger" id="surgeDemoBtn" onclick="simulateSurge()">SIMULATE SURGE TRIP</button><div class="unit" id="surgeDemoNote">Opens relay for 10 seconds</div></div>
-  <div class="uptime">Uptime: <span id="uptime">--</span>s | Auto-refresh 1s</div>
+  <div class="uptime">Uptime: <span id="uptime">--</span>s | Live push: <span id="pushRate">--</span> updates/s</div>
 </div>
 
-<div id="tab-voltage" class="tab-pane" role="tabpanel">
-  <div class="chart-card"><div class="chart-label">Voltage RMS — Last 60 Readings</div><canvas id="vChart" height="140"></canvas></div>
-  <div class="chart-card"><div class="chart-label">Current history · ACS712</div><canvas id="iChart" height="140"></canvas><div class="uptime" id="currentNote">Waiting for a usable ACS712 signal.</div></div>
-  <div class="chart-card"><div class="chart-label">dV/dt — Last 60 Readings</div><canvas id="dChart" height="140"></canvas></div>
-  <div class="uptime">Time relative to latest sample. Gaps indicate missing samples.</div>
+<div id="tab-calibration" class="tab-pane" role="tabpanel">
+  <div class="card"><div class="unit">Load (via relay)</div><button class="btn" id="relayToggleBtn" data-on="0" onclick="setRelayTest(this.getAttribute('data-on')==='1'?'off':'on')">TURN LOAD ON</button><div class="unit" id="relayTestNote">Loading relay state...</div></div>
+  <div class="card"><div class="unit">YCCH6 Surge Demo</div><button class="btn btn-danger" id="surgeDemoBtn" onclick="simulateSurge()">SIMULATE SURGE TRIP</button><div class="unit" id="surgeDemoNote">Opens relay for 10 seconds</div></div>
+  <div class="card"><div class="unit">Surge Test</div><button class="btn btn-danger" id="surgeTestBtn" onclick="testSurge()">TEST SURGE</button><div class="unit" id="surgeTestNote">Simulated trip voltage through real detection for 10 seconds</div></div>
+  <div class="card"><div class="unit">Voltage Calibration</div><div class="unit" style="margin-top:6px">Type the voltage your meter shows right now (above 0, up to 250 V)</div>
+    <div class="cal-row"><input type="number" id="calRef" min="0" max="250" step="0.1" inputmode="decimal" placeholder="240.0" aria-label="Meter reading in volts"><button class="btn" id="calBtn" onclick="calibrate(false)">CALIBRATE</button><button class="btn" id="calResetBtn" onclick="calibrate(true)">RESET TO BUILT-IN</button></div>
+    <div class="unit" id="calScale">Scale: --</div><div class="unit" id="calNote">Also changes the voltage the surge protection sees</div></div>
 </div>
 
 <div id="tab-events" class="tab-pane" role="tabpanel">
@@ -117,9 +130,10 @@ canvas{width:100%;display:block;border-radius:4px}
 
 <script>
 var selectedEvent=null, eventRequest=0;
-var MAX=60, vData=[], iData=[], dData=[], selectedEventId=null, lastProtectionEventId=localStorage.getItem('lastProtectionEventId')||'', dismissedEventId=localStorage.getItem('dismissedEventId')||'';
-var liveVC=document.getElementById('liveVChart'), liveIC=document.getElementById('liveIChart'), vC=document.getElementById('vChart'), iC=document.getElementById('iChart'), dC=document.getElementById('dChart');
-var liveVX=liveVC.getContext('2d'), liveIX=liveIC.getContext('2d'), vX=vC.getContext('2d'), iX=iC.getContext('2d'), dX=dC.getContext('2d');
+var MAX=60, vData=[], iData=[], selectedEventId=null, lastProtectionEventId=localStorage.getItem('lastProtectionEventId')||'';
+var liveVC=document.getElementById('liveVChart'), liveIC=document.getElementById('liveIChart');
+var liveVX=liveVC.getContext('2d'), liveIX=liveIC.getContext('2d');
+var stream=null, lastFrame=0, frames=0, nominal=null, eventRevision=null, calMin=0, calMax=250;
 
 function switchTab(name,btn){
   document.querySelectorAll('.tab-pane').forEach(p=>p.classList.remove('active'));
@@ -128,15 +142,27 @@ function switchTab(name,btn){
   btn.classList.add('active');
   btn.setAttribute('aria-selected','true');
   if(name==='events'){fetchSurges();drawSavedGraphs();}
-  if(name==='voltage')fetchHistory();
-  if(name==='isolation')fetchData();
+  if(name==='isolation')redraw();
 }
 
 function openModal(){document.getElementById('modalBg').classList.add('open')}
 function closeModal(){document.getElementById('modalBg').classList.remove('open')}
 function confirmClear(){closeModal();var token=prompt('Enter admin token to clear history:');if(!token)return;var x=new XMLHttpRequest();x.open('POST','/clearlogs',true);x.setRequestHeader('Content-Type','application/x-www-form-urlencoded');x.onload=function(){if(x.status===200){clearSelectedEvent();fetchSurges();}else alert('Failed: '+x.responseText);};x.send('token='+encodeURIComponent(token));}
-function toggleRelayTest(){var b=document.getElementById('relayTestBtn'),active=b.getAttribute('data-active')==='1',x=new XMLHttpRequest();x.open('POST','/relay-test',true);x.setRequestHeader('Content-Type','application/x-www-form-urlencoded');x.onload=function(){if(x.status===200)fetchData();else alert('Relay test failed: '+x.responseText)};x.send('off='+(active?'1':'0'))}
-function simulateSurge(){var x=new XMLHttpRequest();x.open('POST','/simulate-surge',true);x.onload=function(){if(x.status===200){fetchData();fetchSurges()}else alert('Surge demo failed: '+x.responseText)};x.send('')}
+function setRelayTest(mode){var b=document.getElementById('relayToggleBtn'),x=new XMLHttpRequest();b.disabled=true;x.open('POST','/relay-test',true);x.setRequestHeader('Content-Type','application/x-www-form-urlencoded');x.onload=function(){b.disabled=false;if(x.status===200){b.setAttribute('data-on',mode==='on'?'1':'0');b.textContent=mode==='on'?'TURN LOAD OFF':'TURN LOAD ON'}else alert('Relay control failed: '+x.responseText)};x.onerror=function(){b.disabled=false;alert('Relay connection failed')};x.send('off='+(mode==='off'?'1':'0'))}
+function testSurge(){var b=document.getElementById('surgeTestBtn'),x=new XMLHttpRequest();b.disabled=true;b.textContent='TEST ACTIVE';x.open('POST','/test-surge',true);x.setRequestHeader('Content-Type','application/x-www-form-urlencoded');x.onload=function(){if(x.status===200){fetchSurges()}else{b.disabled=false;b.textContent='TEST SURGE';alert(x.status===409?'Surge Demo is running; wait for it to finish.':'Surge test failed: '+x.responseText)}};x.onerror=function(){b.disabled=false;b.textContent='TEST SURGE'};x.send('')}
+function simulateSurge(){var x=new XMLHttpRequest();x.open('POST','/simulate-surge',true);x.onload=function(){if(x.status===200){fetchSurges()}else alert('Surge demo failed: '+x.responseText)};x.send('')}
+var calErrors={reference_out_of_range:'the meter reading must be above 0 and at most 250 V',test_running:'a surge test is running; wait for it to finish',no_steady_reading:'no steady valid voltage reading yet; wait a few seconds',scale_out_of_bounds:'the meter reading is more than 25% away from the sensor reading; check the sensor and the value typed'};
+function calibrate(reset){
+  var note=document.getElementById('calNote'),v=parseFloat(document.getElementById('calRef').value);
+  if(!reset&&!(v>calMin&&v<=calMax)){note.textContent='Enter your meter reading, above '+calMin+' and at most '+calMax+' V';return}
+  if(!confirm(reset?'Return to the built-in calibration?':'Set the reading to '+v.toFixed(1)+' V? This also changes the voltage the surge protection sees.'))return;
+  var x=new XMLHttpRequest();x.open('POST','/calibrate',true);x.setRequestHeader('Content-Type','application/x-www-form-urlencoded');
+  x.onload=function(){var r={};try{r=JSON.parse(x.responseText)}catch(e){}
+    if(x.status!==200){note.textContent='Not calibrated: '+(calErrors[r.error]||x.responseText);return}
+    note.textContent=(reset?'Built-in calibration restored':'Calibrated: was '+safe(r.reading_before,0).toFixed(1)+' V, now '+safe(r.reading_after,0).toFixed(1)+' V')+(r.stored?'':' (not saved to storage; lost on restart)')};
+  x.onerror=function(){note.textContent='Not calibrated: connection failed'};
+  x.send(reset?'reset=1':'reference_v='+encodeURIComponent(v))
+}
 
 function safe(v,fb){return(v!==undefined&&v!==null&&!isNaN(v))?v:fb}
 function rsz(c){var h=c.getAttribute("data-height")||c.getAttribute("height");c.setAttribute("data-height",h);c.style.height=h+"px";c.width=c.offsetWidth*devicePixelRatio;c.height=Number(h)*devicePixelRatio}
@@ -157,21 +183,16 @@ function drawChart(ctx,data,col,minY,maxY){
 function voltageRange(data){
   var vals=data.filter(function(v){return v!==null&&v!==undefined&&!isNaN(v)});
   if(!vals.length)return{min:180,max:260};
-  var lo=Math.min.apply(null,vals),hi=Math.max.apply(null,vals),span=Math.max(8,hi-lo);
+  var lo=Math.min.apply(null,vals),hi=Math.max.apply(null,vals),span=Math.max(4,hi-lo);
   return{min:Math.max(0,lo-span*.35),max:hi+span*.35}
 }
 
-function drawDvdtChart(ctx,data){
-  var absMax=Math.max.apply(null,data.map(Math.abs));if(absMax<1)absMax=10;
-  var col=absMax>=10?'#111':absMax>=5?'#555':'#999';drawChart(ctx,data,col,-absMax,absMax)
-}
-
-function redraw(){rsz(liveVC);rsz(liveIC);rsz(vC);rsz(iC);rsz(dC);var vr=voltageRange(vData);drawChart(liveVX,vData,'#2563eb',vr.min,vr.max);drawChart(liveIX,iData,'#16a34a',0,2);drawChart(vX,vData,'#2563eb',vr.min,vr.max);drawChart(iX,iData,'#666',0,2);drawDvdtChart(dX,dData)}
+function redraw(){rsz(liveVC);rsz(liveIC);var vr=voltageRange(vData);drawChart(liveVX,vData,'#2563eb',vr.min,vr.max);drawChart(liveIX,iData,'#16a34a',0,2)}
 window.addEventListener('resize',function(){redraw();drawSavedGraphs()});setTimeout(redraw,100);
 
 function dvdtClass(v){var a=Math.abs(v);if(a>=10)return'd-val-fast';if(a>=5)return'd-val-mod';return'd-val-stable'}
 
-function showNoConn(){var b=document.getElementById('badge');b.textContent='NO CONN';b.className='status-badge unknown';setConn('disconnected')}
+function showNoConn(){setConn('disconnected')}
 
 function setConn(state){
   var dot=document.getElementById('connDot'),text=document.getElementById('connText');
@@ -181,15 +202,34 @@ function setConn(state){
   else text.textContent='Disconnected'
 }
 
-function showProtectionAlert(eventId,message){var ab=document.getElementById('alertBanner');if(!eventId||eventId===dismissedEventId)return;ab.textContent=message||'SURGE DETECTED - LOAD ISOLATED';ab.classList.add('show');if(!document.getElementById('dismissAlert')){var b=document.createElement('button');b.id='dismissAlert';b.textContent='Dismiss';b.onclick=function(){dismissedEventId=eventId;localStorage.setItem('dismissedEventId',eventId);ab.classList.remove('show')};ab.insertBefore(b,ab.firstChild)}}
 
-async function fetchData(){
-  try{
-    var r=await fetch('/data',{cache:'no-store'});if(!r.ok)throw 0;
-    var d=await r.json();
-    document.getElementById('vval').textContent=d.sensorOk&&d.voltage!==null?safe(d.voltage,0).toFixed(1):'--.-';
+function signed(v,digits){return v===null||v===undefined||isNaN(v)?'--':(v>=0?'+':'')+v.toFixed(digits)+' V'}
+
+// Every measured burst, pushed by the ESP32 as it happens.
+function onLive(d){
+  lastFrame=Date.now();frames++;
+  document.getElementById('vval').textContent=d.v===null?'--.-':d.v.toFixed(1);
+  document.getElementById('ival').textContent=d.i===null?'N/A':d.i.toFixed(3);
+  document.getElementById('dAvg').textContent=d.avg===null?'--':d.avg.toFixed(1)+' V';
+  document.getElementById('dStep').textContent=signed(d.step,2);
+  document.getElementById('dDev').textContent=signed(d.dev,2);
+  document.getElementById('dNoise').textContent=d.noise===null?'--':'±'+d.noise.toFixed(2)+' V';
+  document.getElementById('dHz').textContent=d.hz===null?'--':d.hz.toFixed(2)+' Hz';
+  document.getElementById('dPct').textContent=d.v===null||!nominal?'--':(d.v/nominal*100).toFixed(1)+'%';
+  var recent=d.chg||(d.chg_age_ms!==null&&d.chg_age_ms<5000),delta=d.chgs?d.chg_to-d.chg_from:0,cb=document.getElementById('changeBadge');
+  cb.textContent=(d.chg?'CHANGING ':'CHANGED ')+signed(delta,1);cb.classList.toggle('hidden',!recent);
+  document.getElementById('changeNote').textContent=d.chg?'Changing now: '+d.chg_from.toFixed(1)+' → '+d.chg_to.toFixed(1)+' V ('+signed(delta,1)+') · steady level was '+d.chg_from.toFixed(1)+' V':d.chgs?'Last change: '+d.chg_from.toFixed(1)+' → '+d.chg_to.toFixed(1)+' V ('+signed(delta,1)+'), '+(d.chg_age_ms/1000).toFixed(0)+' s ago · '+d.chgs+' since restart':'No voltage change detected since restart';
+  var dv=safe(d.dvdt,0),dvEl=document.getElementById('dvdt');dvEl.textContent=(dv>=0?'+':'')+dv.toFixed(2)+' V/s';dvEl.className='val-sm '+dvdtClass(dv);
+  vData.push(d.v);iData.push(d.i);if(vData.length>MAX)vData.shift();if(iData.length>MAX)iData.shift();
+  setConn('connected');redraw()
+}
+
+// Slower-changing state, pushed once a second and at once when it changes.
+function onStatus(d){
+    lastFrame=Date.now();nominal=d.nominal;calMin=safe(d.cal_reference_min,calMin);calMax=safe(d.cal_reference_max,calMax);
+    document.getElementById('calScale').textContent='Scale: '+safe(d.voltage_cal,0).toFixed(1)+(d.voltage_cal_custom?' (calibrated on this page; built-in '+safe(d.voltage_cal_default,0).toFixed(1)+')':' (built-in)');
+    if(eventRevision!==d.event_revision){eventRevision=d.event_revision;fetchSurges()}
     document.getElementById('voltageRange').textContent=Number.isFinite(d.voltage_min_since_boot)&&Number.isFinite(d.voltage_max_since_boot)?'Since restart: '+d.voltage_min_since_boot.toFixed(1)+'–'+d.voltage_max_since_boot.toFixed(1)+' V RMS':'Since restart: --';
-    document.getElementById('ival').textContent=d.current===null?'N/A':safe(d.current,0).toFixed(3);
     document.getElementById('currentDiag').textContent=d.current_estimated?'DEMO LOAD FROM VOLTAGE':'ADC: '+safe(d.current_adc_mean,'--')+' | '+(d.current_sensor_ok?'OK':'CHECK WIRING');
     document.getElementById('uptime').textContent=safe(d.uptime,'--');
     document.getElementById('todayCnt').textContent=safe(d.todaySurges,0);
@@ -197,23 +237,38 @@ async function fetchData(){
     var rs=document.getElementById('relayState');rs.textContent=labels[d.relayState]||'--';
     rs.style.fontWeight=d.relayState==='lockout'?'bold':'normal';
     document.getElementById('relayReason').textContent=d.fault_reason?d.fault_reason.replaceAll('_',' '):'';
-    var rt=document.getElementById('relayTestBtn'),rn=document.getElementById('relayTestNote');if(rt){var ra=!!d.relay_test_active;rt.setAttribute('data-active',ra?'1':'0');rt.textContent=ra?'NORMAL':'TEST ON';rn.textContent=ra?'Relay forced ON for sensor test':'Normal relay control'}
+    var rn=document.getElementById('relayTestNote'),rb=document.getElementById('relayToggleBtn'),loadOn=!d.relay_on;if(rn)rn.textContent=loadOn?'Load ON - relay OFF':'Load OFF - relay ON (isolating)'+(d.relay_test_active?' - manual':'');if(rb&&!rb.disabled){rb.setAttribute('data-on',loadOn?'1':'0');rb.textContent=loadOn?'TURN LOAD OFF':'TURN LOAD ON'}
     var sd=document.getElementById('surgeDemoBtn'),sn=document.getElementById('surgeDemoNote');if(sd){sd.disabled=!!d.demo_trip_active;sd.textContent=d.demo_trip_active?'TRIP ACTIVE':'SIMULATE SURGE TRIP';sn.textContent=d.demo_trip_active?'YCCH6 coil relay open, '+safe(d.demo_trip_remaining_ms,0)+' ms remaining':'Opens relay for 10 seconds'}
-    var ab=document.getElementById('alertBanner');ab.classList.remove('show');
-    var dv=safe(d.dvdt,0),dvEl=document.getElementById('dvdt');dvEl.textContent=(dv>=0?'+':'')+dv.toFixed(2)+' V/s';dvEl.className='val-sm '+dvdtClass(dv);
-    var b=document.getElementById('badge'),sys=d.systemState||'UNKNOWN';b.textContent=sys;b.className='status-badge '+sys.toLowerCase();
-    if(d.latest_event&&d.latest_event.id&&d.latest_event.t==='SURGE'){lastProtectionEventId=d.latest_event.id;localStorage.setItem('lastProtectionEventId',lastProtectionEventId);showProtectionAlert(lastProtectionEventId,'SURGE DETECTED - LOAD ISOLATED')}
-    if(lastProtectionEventId===dismissedEventId)document.getElementById('alertBanner').classList.remove('show');
+    var st=document.getElementById('surgeTestBtn'),stn=document.getElementById('surgeTestNote');if(st){st.disabled=!!d.surge_test_active;st.textContent=d.surge_test_active?'TEST ACTIVE':'TEST SURGE';stn.textContent=d.surge_test_active?'Simulated '+safe(d.surge_test_v,0)+' V, relay '+d.relayState+', '+safe(d.surge_test_remaining_ms,0)+' ms remaining':'Simulated trip voltage through real detection for 10 seconds'}
+    var ab=document.getElementById('alertBanner'),why=d.isolation_reason||'';
+    if(d.relay_on){var manual=why==='MANUAL_OFF';ab.style.background=manual?'#b45309':'';ab.textContent=manual?'LOAD OFF BY USER - RELAY ON (not a trip)':(why.indexOf('SURGE')===0?'SURGE DETECTED':why==='UNDERVOLTAGE'?'UNDERVOLTAGE DETECTED':'LOAD ISOLATED')+' - RELAY ON, LOAD ISOLATED ('+why+(d.voltage!==null&&d.voltage!==undefined?', '+safe(d.voltage,0).toFixed(1)+' V':'')+')';ab.classList.add('show')}else ab.classList.remove('show');
+    if(d.latest_event&&d.latest_event.id&&(d.latest_event.t==='SURGE'||d.latest_event.t==='UNDERVOLTAGE_TRIP')){lastProtectionEventId=d.latest_event.id;localStorage.setItem('lastProtectionEventId',lastProtectionEventId)}
     setConn('connected')
-  }catch{showNoConn()}
 }
 
-async function fetchHistory(){
-  try{var r=await fetch('/history',{cache:'no-store'});if(!r.ok)return;var h=await r.json();if(Array.isArray(h.voltage))vData=h.voltage;if(Array.isArray(h.current))iData=h.current;if(Array.isArray(h.dvdt))dData=h.dvdt;var note=document.getElementById('currentNote');if(note)note.textContent=iData.some(function(v){return v!==null&&v!==undefined&&!isNaN(v)})?'Current shown for demo/history.':'Current history is unavailable until voltage is valid.';redraw()}catch{}
+function onHistory(h){if(Array.isArray(h.v))vData=h.v.slice(-MAX);if(Array.isArray(h.i))iData=h.i.slice(-MAX);redraw()}
+
+// The ESP32 pushes on port 81; the browser reconnects by itself after a dropped stream.
+function connectStream(){
+  if(stream)stream.close();
+  setConn('reconnecting');
+  stream=new EventSource('http://'+location.hostname+':81/');
+  stream.addEventListener('live',function(e){onLive(JSON.parse(e.data))});
+  stream.addEventListener('status',function(e){onStatus(JSON.parse(e.data))});
+  stream.addEventListener('history',function(e){onHistory(JSON.parse(e.data))});
+  stream.onerror=function(){setConn('reconnecting')}
 }
+// Page-side housekeeping only: push rate, and a stale stream is shown and reopened.
+function watchStream(){
+  document.getElementById('pushRate').textContent=frames;frames=0;
+  var silent=Date.now()-lastFrame;
+  if(lastFrame&&silent>3000)showNoConn();
+  if(!stream||stream.readyState===2||(silent>10000&&Date.now()-streamOpened>10000)){streamOpened=Date.now();connectStream()}
+}
+var streamOpened=Date.now();
 
 async function fetchSurges(){
-  try{var r=await fetch('/surges?all=1',{cache:'no-store'});if(!r.ok)return;var d=await r.json();document.getElementById('todayCnt').textContent=d.todayCount||0;document.getElementById('logTotal').textContent=d.count||0;if(selectedEventId&&!(d.entries||[]).some(e=>e.id===selectedEventId))clearSelectedEvent();var tb=document.getElementById('logBody');if(!d.entries||!d.entries.length){tb.innerHTML='<tr><td colspan="5" class="log-empty">No surge events recorded.</td></tr>';return}var html='';for(var i=0;i<d.entries.length;i++){var e=d.entries[i],ev=safe(e.v,null),vv=ev===null?'N/A':parseFloat(ev).toFixed(1)+' V';html+='<tr><td>'+(d.entries.length-i)+'</td><td>'+e.dt+'</td><td>'+e.t+'</td><td class="log-v">'+vv+'</td><td><button class="btn" onclick="showEvent(\''+e.id+'\')">View</button></td></tr>';}tb.innerHTML=html}catch{}
+  try{var r=await fetch('/surges?all=1',{cache:'no-store'});if(!r.ok)return;var d=await r.json();document.getElementById('todayCnt').textContent=d.todayCount||0;document.getElementById('logTotal').textContent=d.count||0;if(selectedEventId&&!(d.entries||[]).some(e=>e.id===selectedEventId))clearSelectedEvent();var tb=document.getElementById('logBody');if(!d.entries||!d.entries.length){tb.innerHTML='<tr><td colspan="5" class="log-empty">No surge events recorded.</td></tr>';return}var html='';for(var i=0;i<d.entries.length;i++){var e=d.entries[i],ev=safe(e.v,null),vv=ev===null?'N/A':parseFloat(ev).toFixed(1)+' V';html+='<tr><td>'+(d.entries.length-i)+'</td><td>'+e.dt+'</td><td>'+e.t+(e.simulated?' (TEST)':'')+'</td><td class="log-v">'+vv+'</td><td><button class="btn" onclick="showEvent(\''+e.id+'\')">View</button></td></tr>';}tb.innerHTML=html}catch{}
 }
 
 function drawSavedGraphs(){
@@ -251,13 +306,13 @@ async function showEvent(id){
     var r=await fetch('/events?id='+encodeURIComponent(id),{cache:'no-store'});if(!r.ok)throw 0;
     var e=await r.json();if(request!==eventRequest)return;selectedEvent=e;
     var kv=document.getElementById('eventKV');kv.textContent='';
-    var fields={'Event ID':e.id,'Type':e.t,'RMS Voltage':Number.isFinite(e.v)?e.v.toFixed(1)+' V':'Unavailable','Time':e.dt,'Boot ID':e.boot_id,'Trigger (us)':e.trigger_us,'Isolation command (us)':e.command_us??'N/A','Software response (us)':e.response_us??'N/A','Physical response':e.physical_response??'unknown'};
+    var fields={'Event ID':e.id,'Type':e.t+(e.simulated?' (TEST)':''),'RMS Voltage':Number.isFinite(e.v)?e.v.toFixed(1)+' V':'Unavailable','Time':e.dt,'Boot ID':e.boot_id,'Trigger (us)':e.trigger_us,'Isolation command (us)':e.command_us??'N/A','Software response (us)':e.response_us??'N/A','Physical response':e.physical_response??'unknown'};
     Object.entries(fields).forEach(function(pair){pair.forEach(function(value){var span=document.createElement('span');span.textContent=value;kv.appendChild(span)})});
     document.getElementById('eventExport').href='/events?id='+encodeURIComponent(id);
     document.getElementById('eventExport').download='event-'+id+'.json';drawSavedGraphs();
   }catch{if(request===eventRequest){document.getElementById('eventKV').textContent='Event details unavailable';drawSavedGraphs()}}
 }
 
-async function fetchAll(){setConn('reconnecting');await fetchData();await fetchHistory();}fetchAll();setInterval(fetchAll,1000);fetchSurges();setInterval(fetchSurges,5000);
+connectStream();setInterval(watchStream,1000);fetchSurges();
 </script></body></html>
 )rawliteral";
